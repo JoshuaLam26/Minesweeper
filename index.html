@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <!--CSS style sheet  -->
+    <link rel="stylesheet" type="text/css" href="minesweeper.css">
+
+
+    <script src="https://www.gstatic.com/firebasejs/5.6.0/firebase.js"></script>
+    <script>
+        // Initialize Firebase
+        var config = {
+            apiKey: "AIzaSyDkf2PjJ4kt60ZN9dloY7tUl7lLNE1xiUM",
+            authDomain: "minesweeper-1536.firebaseapp.com",
+            databaseURL: "https://minesweeper-1536.firebaseio.com",
+            projectId: "minesweeper-1536",
+            storageBucket: "minesweeper-1536.appspot.com",
+            messagingSenderId: "798615803487"
+        };
+        firebase.initializeApp(config);
+    </script>
+</head>
+
+<body>
+    <!-- Titles -->
+    <div id="scoreWrapper">
+        <h1 id="score">Score: 0</h1>
+        <h3 id="timer">00:00:00</h3>
+        <h3 id="user"></h3>
+    </div>
+    <!-- Game Buttons -->
+    <div id="gameButtons">
+        <button onclick="reloadGame()">Reset</button>
+        <button onclick="onclickEasy()" id="easy">Easy (15 bombs)</button>
+        <button onclick="onclickMedium()" id="medium">Medium (20 bombs)</button>
+        <button onclick="onclickHard()" id="hard">Hard (25 bombs)</button>
+    </div>
+    <!-- Game -->
+    <div id="gameWrapper">
+        <table id="gameTable">
+        </table>
+    </div>
+    <!-- Learderboard -->
+    <div id="leaderboardWrapper">
+        <h1 id="leaderboard">Leaderboard</h1>
+        <ol id="placement">
+        </ol>
+    </div>
+    <script>
+        let playerName = prompt("What is your name?");
+        document.getElementById("user").innerHTML = playerName;
+        // location of the bombs
+        let bombLocations = [];
+        // number of rows in the game
+        let rows = 10;
+        // number of columns in the game
+        let columns = 10;
+        // difficulty of the game
+        let currentDifficulty = "easy";
+        // current score
+        let score = 0;
+        // last games score
+        let previousScore = 0;
+        // current seconds
+        let seconds = 0;
+        // current minutes
+        let minutes = prettyTimes(0);
+        // last games seconds
+        let previousSeconds = 0;
+        // last games minutes
+        let previousMinutes = 0;
+        // recursive setTimeout variable
+        let timer;
+
+        // creates the minesweeper board
+        function createBoard(numBombs) {
+            bombLocations = [];
+            gameTable = document.getElementById("gameTable");
+            // adds buttons, sets their id to their x,y cordinates, and sets their onclick to reveal
+            for (let i = 0; i < rows; i++) {
+                let row = gameTable.insertRow(i);
+                for (let j = 0; j < columns; j++) {
+                    let col = row.insertCell(j);
+                    let cell = document.createElement("button");
+                    let idCoordinate = i.toString() + j.toString();
+                    cell.id = idCoordinate;
+                    cell.style.backgroundColor = "white";
+                    cell.onclick = reveal(idCoordinate);
+                    col.appendChild(cell);
+                }
+                gameTable.appendChild(row);
+            }
+            placeBombs(numBombs);
+            startTime();
+            resetScore();
+        }
+
+        // place the bombs
+        function placeBombs(numBomb) {
+            while (bombLocations.length < numBomb) {
+                bombLoc = Math.floor(Math.random() * 10).toString() + Math.floor(Math.random() * 10).toString();
+                if (bombLocations.indexOf(bombLoc) == -1) {
+                    bombLocations.push(bombLoc);
+                }
+            }
+        }
+
+        // Increments the time every second
+        function startTime() {
+            seconds++;
+            seconds = prettyTimes(seconds);
+            if (seconds == 61) {
+                seconds = 0;
+                minutes++;
+                minutes = prettyTimes(minutes);
+            }
+            document.getElementById("timer").innerHTML = minutes + ":" + seconds;
+            timer = setTimeout(startTime, 1000);
+        }
+
+        // adds a 0 infront of the second or minute if they are less than 10
+        function prettyTimes(i) {
+            if (i < 10) {
+                i = "0" + i;
+            }
+            return i;
+        }
+
+        // stops the game and if all the buttons except for bombs are clicked
+        function winner() {
+            for (let i = 0; i < rows; i++) {
+                for (let j = 0; j < columns; j++) {
+                    coordinate = i.toString() + j.toString();
+                    if (bombLocations.indexOf(coordinate) == -1) {
+                        if (document.getElementById(coordinate).style.backgroundColor == "white") {
+                            return;
+                        }
+                    }
+                }
+            }
+            disableAll();
+            saveScore();
+            saveTime();
+            saveGame();
+            window.alert("You won!");
+        }
+
+        // saves the time when you win
+        function saveTime() {
+            clearTimeout(timer);
+            previousSeconds = seconds;
+            previousMinutes = minutes;
+        }
+
+        // sets the time back to zero zero
+        function resetTime() {
+            seconds = prettyTimes(0);
+            minutes = prettyTimes(0);
+            document.getElementById("timer").innerHTML = minutes + ":" + seconds;
+        }
+
+        // onclick Listener for all bombs
+        function reveal(coordinate) {
+            return function () {
+                // if its a bomb, do this
+                if (bombLocations.indexOf(coordinate) != -1) {
+                    // turn the bomb you click into an image
+                    document.getElementById(coordinate).innerHTML = "<img src = ./images/bomb.png width=20px height=20px />";
+                    // change all the other bombs to bomb images
+                    for (let i = 0; i < bombLocations.length; i++) {
+                        if (document.getElementById(bombLocations[i]).innerHTML != "<img src = ./images/bomb.png width=20px height=20px />") {
+                            document.getElementById(bombLocations[i]).innerHTML = "<img src = ./images/bomb.png width=20px height=20px />";
+                        }
+                    }
+                    playSound();
+                    disableAll();
+                    saveTime();
+                    saveScore();
+                    saveGame();
+                }
+                // if its not a bomb
+                else {
+                    let adjacentButtons = getAdjacent(coordinate);
+                    let upDownLeftRightButtons = upDownLeftRight(coordinate);
+                    let bombCounter = 0;
+                    // check for adjacent bombs, and increment bomb counter
+                    for (let i = 0; i < adjacentButtons.length; i++) {
+                        if (bombLocations.indexOf(adjacentButtons[i]) != -1) {
+                            bombCounter += 1;
+                        }
+                    }
+                    // if there is a bomb beside it, set value to bombCounter, make it grey, remove its onclick, increase score
+                    if (bombCounter != 0) {
+                        document.getElementById(coordinate).innerHTML = bombCounter.toString();
+                        document.getElementById(coordinate).style.backgroundColor = "grey";
+                        document.getElementById(coordinate).onclick = null;
+                        score += 1;
+                        document.getElementById("score").innerHTML = "Score: " + score.toString();
+                    }
+                    // if there are no bombs beside it, turn it grey, click buttons, above, below, left, and right
+                    else {
+                        document.getElementById(coordinate).style.backgroundColor = "grey";
+                        for (let i = 0; i < upDownLeftRightButtons.length; i++) {
+                            if (document.getElementById(upDownLeftRightButtons[i]).style.backgroundColor != "grey") {
+                                document.getElementById(upDownLeftRightButtons[i]).click();
+                            }
+                        }
+                    }
+                }
+                // check if we are a winner
+                winner();
+            }
+        }
+        
+        // play sound
+        function playSound() {
+            let audio = new Audio("./audio/bomb.mp3");
+            audio.play();
+        }
+        
+        // remove onclicks to all buttons on board
+        function disableAll() {
+            for (let i = 0; i < rows; i++) {
+                for (let j = 0; j < columns; j++) {
+                    document.getElementById(i.toString() + j.toString()).onclick = null;
+                }
+            }
+        }
+        
+        // save score into variable for firebase
+        function saveScore() {
+            previousScore = score;
+        }
+
+        // set score to 0
+        function resetScore() {
+            score = 0;
+            document.getElementById("score").innerHTML = "Score: " + score;
+        }
+
+        // return a list of coordinates of the buttons up down left and right
+        function upDownLeftRight(coordinate) {
+            x = parseInt(coordinate[0]);
+            y = parseInt(coordinate[1]);
+            validAdjacentButtons = []
+            // if statements guard the board boundaries
+            if ((y + 1) < columns) {
+                topMid = (x).toString() + (y + 1).toString();
+                validAdjacentButtons.push(topMid)
+            }
+            if ((x - 1) >= 0) {
+                midLeft = (x - 1).toString() + (y).toString();
+                validAdjacentButtons.push(midLeft)
+            }
+            if ((x + 1) < rows) {
+                midRight = (x + 1).toString() + (y).toString();
+                validAdjacentButtons.push(midRight)
+            }
+            if ((y - 1) >= 0) {
+                botMid = (x).toString() + (y - 1).toString();
+                validAdjacentButtons.push(botMid)
+            }
+            return validAdjacentButtons;
+        }
+
+        // same thing as upDownLeftRight with corners
+        function getAdjacent(coordinate) {
+            x = parseInt(coordinate[0]);
+            y = parseInt(coordinate[1]);
+            validAdjacentButtons = []
+            if ((x - 1) >= 0 && (y + 1) < columns) {
+                topLeft = (x - 1).toString() + (y + 1).toString();
+                validAdjacentButtons.push(topLeft)
+            }
+            if ((y + 1) < columns) {
+                topMid = (x).toString() + (y + 1).toString();
+                validAdjacentButtons.push(topMid)
+            }
+            if ((x + 1) < rows && (y + 1) < columns) {
+                topRight = (x + 1).toString() + (y + 1).toString();
+                validAdjacentButtons.push(topRight)
+            }
+            if ((x - 1) >= 0) {
+                midLeft = (x - 1).toString() + (y).toString();
+                validAdjacentButtons.push(midLeft)
+            }
+            if ((x + 1) < rows) {
+                midRight = (x + 1).toString() + (y).toString();
+                validAdjacentButtons.push(midRight)
+            }
+            if ((x - 1) >= 0 && (y - 1) >= 0) {
+                botLeft = (x - 1).toString() + (y - 1).toString();
+                validAdjacentButtons.push(botLeft)
+            }
+            if ((y - 1) >= 0) {
+                botMid = (x).toString() + (y - 1).toString();
+                validAdjacentButtons.push(botMid)
+            }
+            if ((x + 1) < rows && (y - 1) >= 0) {
+                botRight = (x + 1).toString() + (y - 1).toString();
+                validAdjacentButtons.push(botRight)
+            }
+            return validAdjacentButtons;
+        }
+        
+        // click easy, medium, or hard buttons depending on what the saved difficulty is
+        function reloadGame() {
+            if (currentDifficulty == "easy") {
+                document.getElementById('easy').click();
+            }
+            if (currentDifficulty == "medium") {
+                document.getElementById("medium").click();
+            }
+            if (currentDifficulty == "hard") {
+                document.getElementById("hard").click();
+            }
+        }
+
+        // reset the board
+        function onclickEasy() {
+            // delete all the rows
+            for (let i = 0; i < rows; i++) {
+                document.getElementById("gameTable").deleteRow(0);
+            }
+            saveScore();
+            saveTime();
+            resetTime();
+            createBoard(15);
+            currentDifficulty = "easy";
+        }
+
+        function onclickMedium() {
+            for (let i = 0; i < rows; i++) {
+                document.getElementById("gameTable").deleteRow(0);
+            }
+            saveScore();
+            saveTime();
+            resetTime();
+            createBoard(20);
+            currentDifficulty = "medium";
+        }
+
+        function onclickHard() {
+            for (let i = 0; i < rows; i++) {
+                document.getElementById("gameTable").deleteRow(0);
+            }
+            saveScore();
+            saveTime();
+            resetTime();
+            createBoard(25);
+            currentDifficulty = "hard";
+        }
+        
+        // firebase functions
+        function printLeaderboard() {
+            let placementList = document.getElementById("placement");
+            let ref = firebase.database().ref("Leaderboard/");
+            ref.orderByChild("score").limitToLast(5).on(
+                "child_added",
+                function (snap) {
+                    let leaderboardPlayer = document.createElement("li")
+                    leaderboardPlayer.innerHTML = (snap.key + " " + snap.val().score)
+                    placementList.insertBefore(leaderboardPlayer, placementList.childNodes[0])
+                }
+            )
+            console.log(placementList.childNodes.length);
+            while (placementList.childNodes.length > 5) {
+                placementList.removeChild(placementList.childNodes[placementList.childNodes.length - 1]);
+            }
+            console.log(placementList.childNodes.length);
+        }
+
+        function saveGame() {
+            firebase.database().ref("Leaderboard/" + playerName).set({
+                score: previousScore
+            })
+            printLeaderboard();
+        }
+
+        // initialize game on start
+        createBoard(15);
+        printLeaderboard();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,43 @@
+body {
+    background-color: darkslategrey
+}
+
+#scoreWrapper {
+    width: 75%;
+    margin: auto;
+}
+
+#scoreWrapper h1,h3 {
+    text-align: center;
+}
+
+#gameTable button {
+    height: 25px;
+    width: 25px;
+    padding: 0px;
+}
+
+#gameWrapper {
+    width: 290px;
+    margin: auto;
+}
+
+#gameButtons {
+    width: 432px;
+    margin: auto;
+}
+
+#leaderboardWrapper h1, p {
+    text-align: center;
+}
+
+#leaderboardWrapper {
+    width: 75%;
+    margin: auto;
+}
+
+#placement {
+    position: relative;
+    left: 35%;
+}
+
